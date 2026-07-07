@@ -138,11 +138,12 @@ RULES:
 
 OUTPUT FORMAT (must match exactly):
 Relationship Dynamic: <Love or Domination or Submission>
-Identity Modifier: <None or Trans or nonbinary representation>
+Identity Modifier: <None or Trans/nonbinary representation>
 
 Do NOT add commentary.
+If the IdentityDigit is NOT 0, output "None".
 """
-    return call_llm(prompt, temperature=0.4)
+    return call_llm(prompt, temperature=0.2)
 
 
 def decode_alien_traits(codes):
@@ -157,6 +158,7 @@ RULE:
 - One phrase per character.
 - Alien Traits MUST describe physical, anatomical, or visibly alien characteristics (e.g., extra limbs, unusual skin, bioluminescence, non‑human senses, exotic physiology).
 - Do NOT generate personality traits for the alien.
+- Treat X as a wildcard, it can be any other letter.
 
 OUTPUT FORMAT (must match exactly):
 Alien Traits: <phrase1>, <phrase2>, <phrase3>, <phrase4>
@@ -178,6 +180,7 @@ RULE:
 - Each letter or digit must influence the phrase.
 - 1–3 words per phrase.
 - One phrase per character.
+- Treat X as a wildcard, it can be any other letter.
 
 OUTPUT FORMAT (must match exactly):
 Human Traits: <phrase1>, <phrase2>, <phrase3>, <phrase4>
@@ -198,6 +201,7 @@ SettingCode: {codes['SettingCode']}
 RULE:
 - Each character must influence one phrase.
 - 1–3 words per phrase.
+- Setting must reflect alien or hybrid environment
 
 OUTPUT FORMAT (must match exactly):
 Setting: <phrase1>, <phrase2>
@@ -256,7 +260,7 @@ Output ONLY this single line.
 
 def decode_twist(codes):
     prompt = f"""
-Decode TwistCode into two short descriptive phrases.
+Decode TwistCode into a short descriptive phrase.
 
 TwistCode: {codes['TwistCode']}
 
@@ -264,6 +268,8 @@ RULE:
 - Each character must influence one word in the phrase.
 - 2–4 words per phrase.
 - Twist phrase MUST describe plot twists, revelations, or unexpected events. They MUST NOT describe animals, random objects, or unrelated nouns.
+- Twist must describe a plot event, not an emotion.
+- Twist should be specific, not vague. 
 
 
 OUTPUT FORMAT (must match exactly):
@@ -325,7 +331,7 @@ def decode_arbn_llm(arbn, codes, max_retries=3):
         names_block = decode_names(codes)
 
         decoded = "\n".join([
-            gender_block.strip(),
+            
             relationship_block.strip(),
             alien_traits_block.strip(),
             human_traits_block.strip(),
@@ -333,6 +339,7 @@ def decode_arbn_llm(arbn, codes, max_retries=3):
             tone_block.strip(),
             twist_block.strip(),
             names_block.strip(),
+            gender_block.strip(),
         ])
 
         # Validate gender
@@ -371,26 +378,26 @@ Treat them as authoritative facts about the characters and setting:
 {decoded_details}
 
 SYNOPSIS RULES:
-- 4–6 sentences.
-- Keep the prose tight, vivid, and impactful. Avoid overly flowery or poetic language.
-- Allow mild romantic tension, suggestive chemistry, and hints of intimacy (“spice”), but keep all content non‑explicit.
-- Do NOT mention the ARBN inside the synopsis.
-- Do NOT mention “decoded details,” “codes,” or anything meta.
-- Do NOT restate the traits as a list; weave them naturally into the prose.
-- The alien and human genders MUST match the decoded details exactly. No exceptions.
-- The Relationship Dynamic MUST match the decoded details exactly. No exceptions.
-- Use the Alien Name and Human Name exactly as provided. Do not rename, alter, or replace them.
-- If the Identity Modifier is “None,” do not mention gender identity.
-- If the Identity Modifier indicates trans or nonbinary representation, include it respectfully and subtly.
+- 2 paragraphs of 2–3 sentences each.
+- Paragraph 1: describe the alien and human exactly as decoded.
+- Paragraph 2: summarize the story, integrating Tone and Twist naturally.
+- The decoded details are factual; do NOT reinterpret or omit them.
+- The Alien Gender and Human Gender are fixed; do NOT change them.
+- If Identity Modifier = None, omit gender identity.
+- If Identity Modifier ≠ None, include it directly and respectfully.
 - The Setting, Tone, and Twist must influence the story naturally, not as lists or labels.
 - Keep the story consistent with all decoded details; do not contradict any field.
+- Do not use the word "spice" to describe the relationship. 
+- Do not use "Starlight Surrender" as the title
 
 FORMAT (must match exactly):
 
 ARBN: {arbn}
 Title: (A creative title based on the story)
 
-Synopsis: (4–6 sentence blurb)
+Synopsis: <Paragraph 1>
+
+<Paragraph 2>
 """
     response = requests.post(
         "http://127.0.0.1:11434/api/generate",
@@ -398,9 +405,11 @@ Synopsis: (4–6 sentence blurb)
             "model": "llama3.2:3b",
             "prompt": prompt,
             "stream": False,
-            "temperature": 1.4,
+            "temperature": 2.4,
             "top_p": 0.95,
-            "top_k": 60
+            "top_k": 60,
+            "repeat_penalty": 1.1,
+            "num_ctx": 8192
         }
     )
 
@@ -416,6 +425,7 @@ def generate_image(decoded_details):
         "<lora:Alien_Concept:0.4> <lora:Astrobeauties:0.4>  romantic sci-fi illustration, alien and human together, "
         "soft lighting, emotional tone, cinematic composition, "
         "detailed faces, expressive eyes, subtle glow effects, 1 human, 1 alien, "
+        "portrait composition, waist‑up, centered subject"
         f"Character details: {decoded_details}"
     )
 
@@ -424,8 +434,15 @@ def generate_image(decoded_details):
         "sampler_name": "Euler a",
         "width": 384,
         "height": 512,
-        "steps": 40,
-        "cfg_scale": 9,
+        "steps": 30,
+        "cfg_scale": 8,
+        "hr_scale": 2,
+          "hr_upscaler": "ESRGAN_4x",
+          "hr_second_pass_steps": 20,
+          "denoising_strength": 0.3,
+          "clip_skip": 1,
+          "postprocessing": ["face_restoration", "detailer"],
+          "postprocessing_strength": 0.5
     }
 
     r = requests.post("http://127.0.0.1:7860/sdapi/v1/txt2img", json=payload)
